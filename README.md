@@ -5,15 +5,20 @@ previous orders, delivery slot booking, basket management, and amending your upc
 
 ## How it talks to Sainsbury's
 
-All automation rides a **real browser network stack**. Akamai (their WAF) denies:
+Akamai (their WAF) denies non-browser TLS fingerprints — plain `fetch` from Bun/Node/curl
+gets `403 Access Denied` at the edge — and also denies `HeadlessChrome` user agents.
 
-- non-browser TLS fingerprints — plain `fetch` from Bun/Node/curl gets `403 Access Denied` at the edge
-- default `HeadlessChrome` user agents — even real headless Chromium is denied until the UA is normalised
+The CLI therefore offers three transports:
 
-So the CLI loads the groceries SPA in a Chromium-compatible browser (local headless by
-default, or a **remote CDP browser via `--ws`** — a Playwright server, or LightPanda on
-`:9222`) and executes API calls as in-page `fetch()` with session cookies included.
-No browser? Use `--http`, but expect edge blocks on most networks.
+| Transport | Flag | Browser needed | Notes |
+|---|---|---|---|
+| **impers sidecar** (default) | — | **No** | Node sidecar runs [`impers`](https://github.com/lexiforest/impers) (curl-impersonate bindings): Chrome JA3 + HTTP/2 fingerprint, cookie jar, ~0.9s per command |
+| remote CDP page | `--ws ws://host:9222` | Remote only | In-page `fetch()` on a warmed groceries SPA page in any CDP browser incl. LightPanda |
+| local Chromium page | `--browser` (+`--headed`) | Yes, local | Same as above with auto-discovered Playwright Chromium |
+| raw fetch | `--http` | No | Usually edge-denied; kept for tolerant networks/proxies |
+
+Only `login` needs a visible browser (you type credentials + MFA). Everything else is
+plain authenticated REST over an impersonated TLS session.
 
 ## Install
 

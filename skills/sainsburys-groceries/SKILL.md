@@ -1,6 +1,6 @@
 ---
 name: sainsburys-groceries
-description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Bun. Browser-based transport (local headless Chromium or remote CDP via --ws incl. LightPanda).
+description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Bun + Node. No browser needed after one-time auth (impersonated-TLS transport); remote CDP via --ws incl. LightPanda supported.
 ---
 
 # Sainsbury's Groceries CLI
@@ -43,7 +43,8 @@ Global flags: `--json`, `-v`, `--ws <url>` (remote CDP endpoint), `--headed`, `-
 
 - **Amend semantics**: with a booked delivery slot, adding items amends the *upcoming order* (that is how Sainsbury's models it pre-checkout). Without a booked slot, items go to the plain basket. The CLI reports which happened (`-> next-delivery` vs `-> basket`). Never place/charge orders; checkout is intentionally out of scope.
 - **Anonymous endpoints return HTTP 200 with empty payloads** — never treat status alone as success; use `whoami`/payload checks.
-- **Transport**: all API calls ride a real browser network stack (in-page fetch) because Akamai denies non-browser TLS and `HeadlessChrome` UAs. Default = local headless Chromium; pass `--ws` to use a remote CDP browser (Playwright server or LightPanda).
+- **Transport**: default = impersonated-TLS sidecar (`impers` via Node, no browser, ~1s/command). `--ws <url>` switches to a remote CDP browser (Playwright server or LightPanda); `--browser` forces local Chromium; `--http` is raw fetch (Akamai-blocked on most networks). Only `login` needs a visible browser (MFA).
+- **Amend semantics**: with a booked delivery slot, adding items amends the *upcoming order* (that is how Sainsbury's models it pre-checkout). Without a booked slot, items go to the plain basket. The CLI reports which happened (`-> next-delivery` vs `-> basket`). Never place/charge orders; checkout is intentionally out of scope.
 - **Ambiguity**: when adding items by name, prefer showing the user top matches (`search`) before `add` if multiple plausible products exist.
 - Slot booking via UI click-through is experimental; use `--dry-run` first.
 

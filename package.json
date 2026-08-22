@@ -12,7 +12,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "impers": "^0.1.0",
+    "koffi": "^3.1.6"
   },
   "optionalDependencies": {
     "playwright-core": "^1.49.0"
@@ -20,5 +22,11 @@
   "devDependencies": {
     "@types/bun": "^1.1.10",
     "typescript": "^5.6.3"
+  },
+  "trustedDependencies": [
+    "koffi"
+  ],
+  "allowScripts": {
+    "koffi@3.1.6": true
   }
 }

@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { GroceriesClient } from "./api/client.ts";
 import { FetchTransport, PageTransport } from "./api/transport.ts";
+import { ImpersTransport } from "./api/impers.ts";
 import { defaultSessionPath } from "./config.ts";
 import {
   parseCookieHeader,
@@ -10,7 +11,7 @@ import {
   deleteSession,
   findWcauthtoken,
 } from "./session/store.ts";
-import { connectBrowser, type BrowserSession } from "./browser/connect.ts";
+import { connectBrowser } from "./browser/connect.ts";
 import {
   exportSessionFromContext,
   findChromiumExecutable,
@@ -34,26 +35,60 @@ program
   .option("-v, --verbose", "verbose logging to stderr", false)
   .option("--ws <url>", "remote CDP WebSocket endpoint (remote Playwright / LightPanda)")
   .option("--headed", "show the local browser window", false)
-  .option("--http", "use direct fetch instead of browser transport (blocked by Akamai on most networks)", false)
+  .option("--browser", "force local Chromium page transport instead of impers sidecar", false)
+  .option("--http", "use raw fetch (denied by Akamai TLS fingerprinting on most networks)", false)
   .option("--session <path>", "session file path", defaultSessionPath());
 
 interface OpenedClient {
   client: GroceriesClient;
-  bs?: BrowserSession;
+  close?: () => Promise<void>;
 }
 
-/** Build a working client: browser transport by default, fetch if --http. */
+/** Build a working client. Priority: --ws remote browser > --browser local > impers sidecar > --http fetch. */
 async function openClient(): Promise<OpenedClient> {
   const opts = program.opts();
   const session = resolveSession(opts.session);
-  if (opts.http) return { client: new GroceriesClient({ session, transport: new FetchTransport(session) }) };
+
+  if (opts.http) {
+    return { client: new GroceriesClient({ session, transport: new FetchTransport(session) }) };
+  }
+
+  if (opts.ws) {
+    const bs = await connectBrowser({ ws: opts.ws, verbose: opts.verbose });
+    if (session) await importSessionToContext(bs.context, session);
+    const page = await openWarmedGroceriesPage(bs.context);
+    return {
+      client: new GroceriesClient({ session, transport: new PageTransport(page) }),
+      close: () => bs.close(),
+    };
+  }
+
+  // Default: impersonated-TLS sidecar (no browser needed post-auth).
+  if (!opts.browser && (await ImpersTransport.nodeAvailable())) {
+    const transport = new ImpersTransport(session);
+    try {
+      return {
+        client: new GroceriesClient({ session, transport }),
+        close: () => transport.close(),
+      };
+    } catch (err) {
+      console.error(`impers sidecar unavailable (${String(err).slice(0, 120)}); falling back to browser`);
+    }
+  }
 
   const executablePath = findChromiumExecutable();
-  const bs = await connectBrowser({ ws: opts.ws, headed: opts.headed, verbose: opts.verbose, executablePath });
+  const bs = await connectBrowser({
+    ws: opts.ws,
+    headed: opts.headed,
+    verbose: opts.verbose,
+    executablePath,
+  });
   if (session) await importSessionToContext(bs.context, session);
   const page = await openWarmedGroceriesPage(bs.context);
-  const client = new GroceriesClient({ session, transport: new PageTransport(page) });
-  return { client, bs };
+  return {
+    client: new GroceriesClient({ session, transport: new PageTransport(page) }),
+    close: () => bs.close(),
+  };
 }
 
 function fail(err: unknown): never {
@@ -70,7 +105,7 @@ async function withClient<T>(fn: (c: GroceriesClient) => Promise<T>): Promise<vo
   } catch (err) {
     fail(err);
   } finally {
-    await opened?.bs?.close();
+    await opened?.close?.();
   }
 }
 
