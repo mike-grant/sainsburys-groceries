@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+# never commit sessions/cookies
+session.json
+*.session.json
+.env
