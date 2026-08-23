@@ -108,7 +108,7 @@ No browser in the image; auth comes in via mount or env:
 
 ```dockerfile
 # any node:*-slim base works; koonjs ships napi prebuilds for linux x64/arm64
-RUN npm i -g github:mike-grant/sainsburys-groceries
+RUN npm i -g sainsburys-groceries-cli
 ```
 
 ```bash
