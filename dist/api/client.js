@@ -1,4 +1,4 @@
-import { API_BASE, BASE_URL } from "../config.js";
+import { API_BASE } from "../config.js";
 import { ApiError, NoSessionError, } from "./transport.js";
 export { ApiError, NoSessionError } from "./transport.js";
 function tomorrowIso() {
@@ -128,24 +128,23 @@ export class GroceriesClient {
         return this.request("DELETE", "/slot/v1/slot/reservation");
     }
     // ---- orders -----------------------------------------------------------------
-    /** Order history endpoint is undocumented; try known candidates in order. */
-    async getOrders() {
-        const candidates = ["/order/v1/order/status", "/order/v1/orders", "/order/v1/order/history"];
-        let lastErr;
-        for (const c of candidates) {
-            try {
-                const data = await this.request("GET", c);
-                const orders = Array.isArray(data)
-                    ? data
-                    : (data?.orders ?? data?.order_history ?? data?.results ?? []);
-                if (orders.length > 0)
-                    return { orders, via: c };
-                lastErr = new ApiError(404, `${BASE_URL}${c}`, "empty order list");
-            }
-            catch (err) {
-                lastErr = err;
-            }
-        }
-        throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+    /**
+     * Order listing. REQUIRES a Bearer/wcauthtoken header pair minted by the
+     * logged-in SPA (see browser/orders-capture.ts) — cookie-only auth yields
+     * an empty list. Pass captured headers when available.
+     */
+    async getOrders(pageSize = 10, pageNumber = 1, headers) {
+        const data = await this.request("GET", "/order/v1/order", {
+            query: { page_size: String(pageSize), page_number: String(pageNumber) },
+            headers,
+        });
+        const orders = Array.isArray(data)
+            ? data
+            : (data?.orders ?? []);
+        return { orders };
+    }
+    /** Full detail for one order, incl. order_items[] (same header requirement). */
+    getOrderDetail(uid, headers) {
+        return this.request("GET", `/order/v1/order/${uid}`, { headers });
     }
 }

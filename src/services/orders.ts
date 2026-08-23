@@ -70,6 +70,21 @@ export async function getLatestOrder(client: GroceriesClient, ctx: OrdersContext
   return latest;
 }
 
+/** Full detail for one order: items, payment, address, slot. */
+export async function getOrderDetailFull(
+  client: GroceriesClient,
+  ctx: OrdersContext,
+  uid: string,
+): Promise<{ summary: OrderSummary; detail: Record<string, unknown> }> {
+  const ob = await openOrders(client, ctx);
+  try {
+    const d = await ob.detail(uid);
+    return { summary: normalise(d), detail: d };
+  } finally {
+    await ob.close();
+  }
+}
+
 /**
  * Search line items across previous orders ("mushy peas", brand names…).
  * Walks history newest-first in one browser session, fetching each order's

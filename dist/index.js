@@ -9,7 +9,7 @@ import { connectBrowser } from "./browser/connect.js";
 import { findChromiumExecutable, importSessionToContext, openWarmedGroceriesPage, } from "./browser/context.js";
 import { interactiveLogin, credentialLogin } from "./browser/login.js";
 import { bookSlotViaBrowser, listSlotsViaBrowser } from "./browser/slots.js";
-import { getLatestOrder, getOrders } from "./services/orders.js";
+import { findInOrders, getLatestOrder, getOrderDetailFull, getOrders } from "./services/orders.js";
 import { smartAdd } from "./services/basket.js";
 import { doctorApi, doctorLightpanda } from "./services/doctor.js";
 import { fmtPrice, printTable, truncate } from "./util/format.js";
@@ -212,27 +212,148 @@ basket
 }));
 // ---- orders -----------------------------------------------------------------------
 const orders = program.command("orders").description("previous & upcoming orders");
+function ordersCtx() {
+    const opts = program.opts();
+    return {
+        session: resolveSession(opts.session),
+        browser: {
+            ws: wsEndpoint(opts),
+            headed: opts.headed,
+            verbose: opts.verbose,
+            executablePath: findChromiumExecutable(),
+            sessionPath: opts.session,
+        },
+    };
+}
 orders
     .command("list")
     .alias("history")
     .option("-n, --limit <n>", "max orders shown", "10")
-    .action(async (o) => withClient(async (client) => {
-    const { orders: list, via } = await getOrders(client);
-    const rows = list.slice(0, Number(o.limit));
-    if (program.opts().json)
-        return console.log(JSON.stringify({ via, orders: rows }, null, 2));
-    console.error(`via: ${via}`);
-    printTable(rows, ["id", "status", "delivery_date", "total", "amendable"]);
-}));
+    .action(async (o) => {
+    const oc = await openClient();
+    try {
+        const limit = Number(o.limit);
+        const pageSize = Math.min(limit || 10, 10);
+        const pages = Math.ceil(limit / pageSize) || 1;
+        let all = [];
+        let via = "";
+        for (let p = 1; p <= pages; p++) {
+            const r = await getOrders(oc.client, ordersCtx(), { pageNumber: p, pageSize });
+            via = r.via;
+            all = all.concat(r.orders);
+            if (r.orders.length < pageSize)
+                break;
+        }
+        const rows = all.slice(0, limit);
+        if (program.opts().json)
+            return console.log(JSON.stringify({ via, orders: rows }, null, 2));
+        console.error(`via: ${via}`);
+        printTable(rows.map((r2) => ({ ...r2, raw: undefined })), ["id", "status", "delivery_date", "total", "amendable"]);
+    }
+    catch (err) {
+        fail(err);
+    }
+    finally {
+        await oc.close?.();
+    }
+});
+orders
+    .command("find")
+    .description('search line items across previous orders, e.g. orders find "mushy peas" --pages 3')
+    .argument("<query>")
+    .option("-p, --pages <n>", "how many history pages to scan (10 orders/page)", "3")
+    .action(async (query, o) => {
+    const oc = await openClient();
+    try {
+        const res = await findInOrders(oc.client, ordersCtx(), query, {
+            maxPages: Number(o.pages),
+        });
+        if (program.opts().json)
+            return console.log(JSON.stringify(res, null, 2));
+        console.error(`scanned ${res.scanned} orders (via ${res.via})`);
+        if (!res.matches.length)
+            return console.log(`no matches for "${query}"`);
+        for (const m of res.matches) {
+            console.log(`\n${m.order.id}  ${m.order.delivery_date?.slice(0, 10) ?? "?"}  total ${fmtPrice(m.order.total)}:`);
+            for (const it of m.items)
+                console.log(`   • ${it.quantity}${it.uom ?? ""} ${truncate(it.name, 60)} (${it.uid}) ${fmtPrice(it.sub_total)}`);
+        }
+    }
+    catch (err) {
+        fail(err);
+    }
+    finally {
+        await oc.close?.();
+    }
+});
+orders
+    .command("view")
+    .alias("show")
+    .description("full detail of one order: every line item, payment, address, slot")
+    .argument("<orderIdOrLatest>")
+    .action(async (orderIdOrLatest) => {
+    try {
+        const oc = await openClient();
+        try {
+            let uid = orderIdOrLatest;
+            if (uid === "latest")
+                uid = (await getLatestOrder(oc.client, ordersCtx())).id;
+            const { summary, detail } = await getOrderDetailFull(oc.client, ordersCtx(), uid);
+            if (program.opts().json)
+                return console.log(JSON.stringify(detail, null, 2));
+            const addr = (detail.delivery_address ?? {});
+            const slot = summary.delivery_date && detail.slot_end_time
+                ? `${String(summary.delivery_date).slice(0, 16).replace("T", " ")} → ${String(detail.slot_end_time).slice(11, 16)}`
+                : "—";
+            console.log(`Order ${summary.id}  [${summary.status}]  slot: ${slot}  total ${fmtPrice(summary.total)}`);
+            if (addr.nickname || addr.postcode)
+                console.log(`Address: ${addr.nickname ?? ""} ${[addr.street, addr.town, addr.postcode].filter(Boolean).join(", ")}`);
+            if (detail.receipt_url)
+                console.log(`Receipt: ${String(detail.receipt_url).split("?")[0]}  (signed URL, ~1h validity)`);
+            const items = (Array.isArray(detail.order_items) ? detail.order_items : []);
+            printTable(items.map((it) => ({
+                qty: String(it.quantity),
+                name: truncate(String(it.product?.name ?? "?"), 55),
+                uid: it.product?.product_uid ?? "?",
+                price: fmtPrice(it.sub_total),
+            })), ["qty", "name", "uid", "price"]);
+            const money = [
+                ["Subtotal", detail.sub_total],
+                ["Slot/delivery", detail.slot_price],
+                ["Carrier bags", detail.carrier_bag_charge],
+                ["Savings", detail.savings],
+            ];
+            const parts = money
+                .filter(([, v]) => v !== undefined && v !== null && Number.isFinite(Number(v)))
+                .map(([k, v]) => `${k} ${fmtPrice(Number(v))}`);
+            console.log(`\n${parts.join("  ·  ")}  →  Total ${fmtPrice(summary.total)}`);
+        }
+        finally {
+            await oc.close?.();
+        }
+    }
+    catch (err) {
+        fail(err);
+    }
+});
 orders
     .command("latest")
     .description("most recent / next order")
-    .action(async () => withClient(async (client) => {
-    const latest = await getLatestOrder(client);
-    if (program.opts().json)
-        return console.log(JSON.stringify(latest, null, 2));
-    printTable([{ ...latest, raw: undefined }], ["id", "status", "delivery_date", "total", "amendable"]);
-}));
+    .action(async () => {
+    const oc = await openClient();
+    try {
+        const latest = await getLatestOrder(oc.client, ordersCtx());
+        if (program.opts().json)
+            return console.log(JSON.stringify(latest, null, 2));
+        printTable([{ ...latest, raw: undefined }], ["id", "status", "delivery_date", "total", "amendable"]);
+    }
+    catch (err) {
+        fail(err);
+    }
+    finally {
+        await oc.close?.();
+    }
+});
 const amend = program.command("amend").description("amend an existing/upcoming order");
 amend
     .command("add")

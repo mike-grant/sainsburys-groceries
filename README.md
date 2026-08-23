@@ -69,6 +69,7 @@ Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
 
 | Task | Command |
 |---|---|
+| view one order in full | `orders view <orderId>` or `orders view latest` |
 | search order history | `orders find "mushy peas" --pages 3` |
 | orders history | `orders list [-n 10]` / `orders latest` |
 | search | `search "oat milk" -n 5 [--json]` |

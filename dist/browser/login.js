@@ -62,15 +62,19 @@ export async function interactiveLogin(opts) {
 function promptMfa() {
     return new Promise((resolve) => {
         process.stdout.write("Enter the MFA code sent to you: ");
-        let buf = "";
-        const onData = (d) => {
-            buf += d.toString();
-            if (buf.includes("\n")) {
-                process.stdin.removeListener("data", onData);
-                resolve(buf.trim());
+        // once() + pause(): leaving stdin flowing keeps the process alive after
+        // login completes — a classic CLI hang.
+        process.stdin.once("data", (buf) => {
+            const code = buf.toString().trim();
+            try {
+                process.stdin.pause();
+                process.stdin.unref?.();
             }
-        };
-        process.stdin.on("data", onData);
+            catch {
+                // non-TTY edge cases
+            }
+            resolve(code);
+        });
     });
 }
 /**

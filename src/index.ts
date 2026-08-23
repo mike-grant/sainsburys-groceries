@@ -20,7 +20,7 @@ import {
 } from "./browser/context.ts";
 import { interactiveLogin, credentialLogin } from "./browser/login.ts";
 import { bookSlotViaBrowser, listSlotsViaBrowser } from "./browser/slots.ts";
-import { findInOrders, getLatestOrder, getOrders } from "./services/orders.ts";
+import { findInOrders, getLatestOrder, getOrderDetailFull, getOrders } from "./services/orders.ts";
 import { smartAdd } from "./services/basket.ts";
 import { doctorApi, doctorLightpanda } from "./services/doctor.ts";
 import { fmtPrice, printTable, priceOf, truncate } from "./util/format.ts";
@@ -336,6 +336,64 @@ orders
       fail(err);
     } finally {
       await oc.close?.();
+    }
+  });
+
+orders
+  .command("view")
+  .alias("show")
+  .description("full detail of one order: every line item, payment, address, slot")
+  .argument("<orderIdOrLatest>")
+  .action(async (orderIdOrLatest: string) => {
+    try {
+      const oc = await openClient();
+      try {
+        let uid = orderIdOrLatest;
+        if (uid === "latest") uid = (await getLatestOrder(oc.client, ordersCtx())).id;
+        const { summary, detail } = await getOrderDetailFull(oc.client, ordersCtx(), uid);
+        if (program.opts().json) return console.log(JSON.stringify(detail, null, 2));
+
+        const addr = (detail.delivery_address ?? {}) as Record<string, unknown>;
+        const slot =
+          summary.delivery_date && detail.slot_end_time
+            ? `${String(summary.delivery_date).slice(0, 16).replace("T", " ")} → ${String(detail.slot_end_time).slice(11, 16)}`
+            : "—";
+        console.log(
+          `Order ${summary.id}  [${summary.status}]  slot: ${slot}  total ${fmtPrice(summary.total)}`,
+        );
+        if (addr.nickname || addr.postcode)
+          console.log(
+            `Address: ${addr.nickname ?? ""} ${[addr.street, addr.town, addr.postcode].filter(Boolean).join(", ")}`,
+          );
+        if (detail.receipt_url)
+          console.log(`Receipt: ${String(detail.receipt_url).split("?")[0]}  (signed URL, ~1h validity)`);
+
+        const items = (Array.isArray((detail as any).order_items) ? (detail as any).order_items : []) as any[];
+        printTable(
+          items.map((it) => ({
+            qty: String(it.quantity),
+            name: truncate(String(it.product?.name ?? "?"), 55),
+            uid: it.product?.product_uid ?? "?",
+            price: fmtPrice(it.sub_total),
+          })),
+          ["qty", "name", "uid", "price"],
+        );
+
+        const money = [
+          ["Subtotal", detail.sub_total],
+          ["Slot/delivery", detail.slot_price],
+          ["Carrier bags", detail.carrier_bag_charge],
+          ["Savings", detail.savings],
+        ] as const;
+        const parts = money
+          .filter(([, v]) => v !== undefined && v !== null && Number.isFinite(Number(v)))
+          .map(([k, v]) => `${k} ${fmtPrice(Number(v))}`);
+        console.log(`\n${parts.join("  ·  ")}  →  Total ${fmtPrice(summary.total)}`);
+      } finally {
+        await oc.close?.();
+      }
+    } catch (err) {
+      fail(err);
     }
   });
 
