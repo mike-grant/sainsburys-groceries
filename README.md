@@ -1,18 +1,60 @@
 # sainsburys-groceries
 
-Bun TypeScript CLI + agent skill for automating [Sainsbury's Groceries](https://www.sainsburys.co.uk/gol-ui/):
-previous orders, delivery slot booking, basket management, and amending your upcoming order.
+Runtime-agnostic (Node & Bun) TypeScript CLI + agent skill for automating
+[Sainsbury's Groceries](https://www.sainsburys.co.uk/gol-ui/): previous orders,
+delivery slot booking, basket management, and amending your upcoming order.
+
+## Runtimes: Node & Bun
+
+The same TypeScript runs on both. The transport layer auto-detects:
+
+| Invocation | impers transport | Topology |
+|---|---|---|
+| `node src/index.ts ...` (or installed bin) | in-process | **single process** — fastest (~0.75s/cmd) |
+| `bun src/index.ts ...` / `bunx --bun sainsburys` | Node sidecar (auto-spawned) | 2 processes (~1.3s/cmd) |
+
+Why: `impers` binds libcurl-impersonate via Koffi, and Koffi's NAPI calls crash
+inside Bun's runtime — so under Bun the CLI spawns a sidecar on `node` from PATH
+(override with `IMPERS_NODE_BIN`). If neither native path is available it falls
+back to browser transports with a clear note.
+
+Requirements: Node >= 22.18 or Bun >= 1.1.
+
+## Installing in containers
+
+No browser is needed in the image — auth cookies come in via mount or env:
+
+```dockerfile
+# e.g. in your own image (any node:*-slim base works; koffi ships prebuilds)
+COPY --from=sainsburys-cli /app /opt/sainsburys        # or npm i sainsburys-groceries-cli
+ENV IMPER_CACHE_DIR=/opt/impers-cache                   # bake after first run to skip download
+RUN node /opt/sainsburys/bin/sainsburys.js doctor api || true   # warms libcurl-impersonate cache
+```
+
+Auth options inside the container:
+
+```bash
+# 1) mount a session file prepared on your Mac (one-time `sainsburys login`)
+docker run -v ~/.sainsburys:/home/shopper/.sainsburys:ro ...
+
+# 2) env vars (CI-friendly)
+docker run -e SAINSBURYS_COOKIE="WC_AUTHENTICATION_...=...; JSESSIONID=..." \
+           -e SAINSBURYS_WCAUTHTOKEN="..." ...
+```
+
+Set `TZ=Europe/London` for sane slot times. A minimal example Dockerfile ships
+in this repo (`Dockerfile`); sessions/cookies are gitignored and dockerignored.
 
 ## How it talks to Sainsbury's
 
 Akamai (their WAF) denies non-browser TLS fingerprints — plain `fetch` from Bun/Node/curl
 gets `403 Access Denied` at the edge — and also denies `HeadlessChrome` user agents.
 
-The CLI therefore offers three transports:
+The CLI therefore offers these transports:
 
 | Transport | Flag | Browser needed | Notes |
 |---|---|---|---|
-| **impers sidecar** (default) | — | **No** | Node sidecar runs [`impers`](https://github.com/lexiforest/impers) (curl-impersonate bindings): Chrome JA3 + HTTP/2 fingerprint, cookie jar, ~0.9s per command |
+| **impers** (default) | — | **No** | [`impers`](https://github.com/lexiforest/impers) (curl-impersonate bindings): Chrome JA3 + HTTP/2 fingerprint, cookie jar; in-process under Node, sidecar under Bun |
 | remote CDP page | `--ws ws://host:9222` | Remote only | In-page `fetch()` on a warmed groceries SPA page in any CDP browser incl. LightPanda |
 | local Chromium page | `--browser` (+`--headed`) | Yes, local | Same as above with auto-discovered Playwright Chromium |
 | raw fetch | `--http` | No | Usually edge-denied; kept for tolerant networks/proxies |

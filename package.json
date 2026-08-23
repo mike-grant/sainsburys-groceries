@@ -1,13 +1,30 @@
 {
   "name": "sainsburys-groceries-cli",
   "version": "0.1.0",
-  "description": "Bun TypeScript CLI + agent skill for Sainsbury's Groceries: previous orders, slot booking, amending orders. Pure HTTP first, Playwright-over-WebSocket (incl. LightPanda CDP) fallback.",
+  "description": "Sainsbury's Groceries CLI + agent skill: previous orders, slot booking, amending orders. Runtime-agnostic TypeScript (Node & Bun). Impersonated-TLS transport passes Akamai with no browser after one-time auth; remote CDP (--ws, incl. LightPanda) supported.",
   "type": "module",
+  "license": "MIT",
   "bin": {
-    "sainsburys": "./src/index.ts"
+    "sainsburys": "./bin/sainsburys.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/api/client.ts",
+    "./transports": "./src/api/transport.ts"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.18",
+    "bun": ">=1.1"
   },
   "scripts": {
     "cli": "bun src/index.ts",
+    "cli:node": "node src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

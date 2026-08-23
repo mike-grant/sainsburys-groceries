@@ -1,0 +1,13 @@
+node_modules
+.git
+.gitignore
+tests
+skills
+scripts
+README.md
+AGENTS.md
+*.md
+# never bake sessions/cookies into images
+session.json
+**/session.json
+.env

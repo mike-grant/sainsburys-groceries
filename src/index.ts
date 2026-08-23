@@ -89,6 +89,12 @@ async function openClient(): Promise<OpenedClient> {
       } catch (err) {
         console.error(`impers sidecar unavailable (${String(err).slice(0, 120)}); falling back to browser`);
       }
+    } else if (!opts.ws) {
+      console.error(
+        "note: running under Bun but Node was not found for the impers sidecar; " +
+          "falling back to local Chromium. Prefer `node src/index.ts` (in-process, faster) " +
+          "or install Node alongside Bun.",
+      );
     }
   }
 
