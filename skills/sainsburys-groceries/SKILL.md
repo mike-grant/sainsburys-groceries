@@ -31,12 +31,19 @@ Add `--json` to any command for machine-readable output.
 
 ## Authentication (one-time)
 
-Session cookies are stored at `~/.sainsburys/session.json`. Three ways to auth:
+Session cookies are stored at `~/.sainsburys/session.json`. Four ways to auth:
 
-1. **Interactive login** (handles MFA; user completes login in a visible window):
+1. **Headless credential login** (servers/CI/agents — no window needed):
+   ```bash
+   SAINSBURYS_USERNAME=you@example.com SAINSBURYS_PASSWORD='...' sainsburys login
+   # if Sainsbury's sends an MFA code, add: --mfa <code>  (or it prompts on stdin)
+   ```
+   Credentials are read from env only, never argv. On failure a screenshot is
+   saved to `~/.sainsburys/login-debug.png`.
+2. **Interactive login** (visible browser window; user completes login + MFA):
    `sainsburys login`
-2. **Remote browser**: `sainsburys login --ws ws://<host>:9222` (user completes login in that remote browser)
-3. **Paste devtools cookies** (no browser):
+3. **Remote browser**: `sainsburys login --ws ws://<host>:9222`
+4. **Paste devtools cookies** (no browser):
    `sainsburys import-cookie-header "WC_AUTHENTICATION_...=...; JSESSIONID=..." -t <wcauthtoken>`
    Or env vars: `SAINSBURYS_COOKIE="..." SAINSBURYS_WCAUTHTOKEN="..."`.
 

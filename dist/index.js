@@ -7,7 +7,7 @@ import { defaultSessionPath } from "./config.js";
 import { parseCookieHeader, resolveSession, saveSession, deleteSession, findWcauthtoken, } from "./session/store.js";
 import { connectBrowser } from "./browser/connect.js";
 import { findChromiumExecutable, importSessionToContext, openWarmedGroceriesPage, } from "./browser/context.js";
-import { interactiveLogin } from "./browser/login.js";
+import { interactiveLogin, credentialLogin } from "./browser/login.js";
 import { bookSlotViaBrowser, listSlotsViaBrowser } from "./browser/slots.js";
 import { getLatestOrder, getOrders } from "./services/orders.js";
 import { smartAdd } from "./services/basket.js";
@@ -67,18 +67,37 @@ async function withClient(fn) {
 // ---- auth -----------------------------------------------------------------
 program
     .command("login")
-    .description("interactive login in a browser (local or remote via --ws); saves session cookies")
-    .action(async () => {
+    .description("authenticate: with SAINSBURYS_USERNAME+SAINSBURYS_PASSWORD set, fills the form headlessly (add --mfa <code> if prompted); otherwise opens an interactive browser window")
+    .option("--mfa <code>", "one-time code for the MFA challenge step")
+    .action(async (cmdOpts) => {
     const opts = program.opts();
+    const username = process.env.SAINSBURYS_USERNAME;
+    const password = process.env.SAINSBURYS_PASSWORD;
     try {
-        const { sessionPath } = await interactiveLogin({
-            ws: opts.ws,
-            headed: opts.headed || !opts.ws,
-            verbose: opts.verbose,
-            sessionPath: opts.session,
-            executablePath: findChromiumExecutable(),
-        });
-        console.log(`Session saved to ${sessionPath}`);
+        if (username && password) {
+            console.error(`Credential login for ${username}${opts.ws ? ` via remote browser ${opts.ws}` : " (headless local browser)"}...`);
+            const { sessionPath } = await credentialLogin({
+                username,
+                password,
+                mfaCode: cmdOpts.mfa,
+                ws: opts.ws,
+                headed: opts.headed,
+                verbose: opts.verbose,
+                sessionPath: opts.session,
+                executablePath: findChromiumExecutable(),
+            });
+            console.log(`Session saved to ${sessionPath}`);
+        }
+        else {
+            const { sessionPath } = await interactiveLogin({
+                ws: opts.ws,
+                headed: opts.headed || !opts.ws,
+                verbose: opts.verbose,
+                sessionPath: opts.session,
+                executablePath: findChromiumExecutable(),
+            });
+            console.log(`Session saved to ${sessionPath}`);
+        }
     }
     catch (err) {
         fail(err);

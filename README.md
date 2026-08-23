@@ -48,10 +48,19 @@ node src/index.ts --help              # same file, same features
 ```bash
 sainsburys login                 # visible local window; complete MFA yourself
 sainsburys login --ws ws://host:9222   # same, in a remote CDP browser
+
+# headless / CI — CLI fills the form itself; creds via env only (never argv):
+SAINSBURYS_USERNAME=you@example.com SAINSBURYS_PASSWORD='...' sainsburys login
+SAINSBURYS_USERNAME=... SAINSBURYS_PASSWORD=... sainsburys login --mfa 123456  # pre-supply OTP
+
 # or, no browser at all:
 sainsburys import-cookie-header "WC_AUTHENTICATION_...=...; JSESSIONID=..." -t <wcauthtoken>
 # or env: SAINSBURYS_COOKIE / SAINSBURYS_WCAUTHTOKEN
 ```
+
+Headless credential mode pauses for the SMS/app OTP if `--mfa` isn't given and a
+terminal is attached. On failure it saves a screenshot to
+`~/.sainsburys/login-debug.png` for diagnosis.
 
 Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
 `sainsburys whoami`, re-login roughly weekly when it expires.
