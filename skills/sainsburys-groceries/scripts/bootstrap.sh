@@ -7,13 +7,13 @@ if command -v sainsburys >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "sainsburys not found; installing globally from GitHub..."
+echo "sainsburys not found; installing globally from npm..."
 if ! command -v npm >/dev/null 2>&1; then
-  echo "error: npm not found. Install Node.js >= 22.18 first." >&2
+  echo "error: npm not found. Install Node.js >= 20 first." >&2
   exit 1
 fi
 
-npm i -g github:mike-grant/sainsburys-groceries
+npm i -g sainsburys-groceries-cli
 
 command -v sainsburys >/dev/null 2>&1 || { echo "error: install finished but binary not on PATH" >&2; exit 1; }
 echo "installed: $(command -v sainsburys)"

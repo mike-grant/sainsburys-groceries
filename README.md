@@ -35,10 +35,12 @@ exact commands and safety semantics.
 ## Install the CLI
 
 ```bash
-npm i -g sainsburys-groceries-cli      # Node >= 22.18
+npm i -g sainsburys-groceries-cli     # Node >= 20
+# or zero-install per command:
+npx -y sainsburys-groceries-cli search "oat milk"
 # or run straight from a clone:
-bun src/index.ts --help                # Bun >= 1.1
-node src/index.ts --help               # same file, same features
+bun src/index.ts --help               # Bun >= 1.1
+node src/index.ts --help              # same file, same features
 ```
 
 ## Authenticate (one-time)

@@ -10,14 +10,16 @@ This skill is instructions only — the CLI is a separate one-time setup.
 
 ## First run (bootstrap)
 
-If `sainsburys` is not on PATH, run the bundled installer once:
+If `sainsburys` is not on PATH, either run the bundled installer once:
 
 ```bash
 bash "<this-skill-dir>/scripts/bootstrap.sh"
 ```
 
-It installs the CLI globally via npm (`npm i -g github:mike-grant/sainsburys-groceries`).
-Requires Node.js >= 22.18. After that, all commands are plain `sainsburys <command>`.
+or install directly (`npm i -g sainsburys-groceries-cli`), or use npx
+without installing at all by prefixing commands: `npx -y sainsburys-groceries-cli <command>`.
+
+Requires Node.js >= 20. After setup, all commands are plain `sainsburys <command>`.
 
 **Already cloned the repo?** You can skip the installer and run in place:
 
