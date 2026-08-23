@@ -81,6 +81,8 @@ function promptMfa() {
  */
 export async function credentialLogin(opts) {
     const timeoutMs = opts.timeoutMs ?? 3 * 60_000;
+    const t0 = Date.now();
+    const step = (msg) => console.error(`[login ${Math.round((Date.now() - t0) / 1000)}s] ${msg}`);
     const bs = await connectBrowser({
         ws: opts.ws,
         headed: opts.headed,
@@ -88,28 +90,37 @@ export async function credentialLogin(opts) {
         executablePath: opts.executablePath,
     });
     try {
+        step("opening account.sainsburys.co.uk/gol/login ...");
         const page = await bs.context.newPage();
         await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
         await dismissCookieConsent(page).catch(() => { });
+        step(`page loaded: "${await page.title().catch(() => "?")}"`);
+        step("filling credentials...");
         const userField = page.locator('input[data-testid="username"], input[name="username"]').first();
         const passField = page.locator('input[data-testid="password"], input[name="password"]').first();
         await userField.waitFor({ state: "visible", timeout: 30_000 });
         await userField.fill(opts.username);
         await passField.fill(opts.password);
+        step("submitting...");
         await page.locator('button[data-testid="log-in"], button[type="submit"]').first().click();
         // Give the challenge (if any) time to render, then handle MFA.
         await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => { });
+        step(`post-submit page: "${await page.title().catch(() => "?")}" (${page.url().slice(0, 80)})`);
         const mfaField = page
             .locator('input[autocomplete="one-time-code"], input[inputmode="numeric"], [data-testid*="otp" i], [data-testid*="code" i]')
             .first();
         if (await mfaField.isVisible({ timeout: 8_000 }).catch(() => false)) {
+            step("MFA input detected");
             const code = opts.mfaCode ?? (await promptMfa());
             await mfaField.fill(code);
             await page
                 .locator('button[type="submit"], button[data-testid*="verify" i], button[data-testid*="submit" i]')
                 .first()
                 .click();
-            console.error("MFA code submitted; completing sign-in...");
+            step("MFA code submitted; completing sign-in...");
+        }
+        else if (opts.verbose) {
+            step("no MFA input seen; waiting for auth cookies...");
         }
         const authed = await waitUntilAuthed(bs.context, Date.now() + timeoutMs);
         if (!authed) {
@@ -117,13 +128,14 @@ export async function credentialLogin(opts) {
             try {
                 fs.mkdirSync(path.dirname(shot), { recursive: true });
                 await page.screenshot({ path: shot, fullPage: true });
-                console.error(`Login did not complete; screenshot saved to ${shot}`);
+                step(`Login did not complete; screenshot saved to ${shot}`);
             }
             catch {
-                console.error("Login did not complete.");
+                step("Login did not complete.");
             }
             throw new Error("Credential login failed — check credentials, or an unexpected MFA/challenge screen appeared.");
         }
+        step("authenticated ✓ capturing session...");
         const cookies = await bs.context.cookies(["https://www.sainsburys.co.uk"]);
         const sessionPath = saveSession(sessionFromCookies(cookies), opts.sessionPath);
         return { session: sessionFromCookies(cookies), sessionPath };
