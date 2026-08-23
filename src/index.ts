@@ -53,8 +53,8 @@ async function openClient(): Promise<OpenedClient> {
     return { client: new GroceriesClient({ session, transport: new FetchTransport(session) }) };
   }
 
-  if (opts.ws) {
-    const bs = await connectBrowser({ ws: opts.ws, verbose: opts.verbose });
+  if (wsEndpoint(opts)) {
+    const bs = await connectBrowser({ ws: wsEndpoint(opts), verbose: opts.verbose });
     if (session) await importSessionToContext(bs.context, session);
     const page = await openWarmedGroceriesPage(bs.context);
     return {
@@ -66,6 +66,12 @@ async function openClient(): Promise<OpenedClient> {
   // Default: koonjs impersonated-TLS transport (works under Node AND Bun).
   const koon = new KoonTransport(session);
   return { client: new GroceriesClient({ session, transport: koon }), close: () => koon.close() };
+}
+
+
+/** Resolve remote CDP endpoint: --ws flag wins, then SAINSBURYS_WS env. */
+function wsEndpoint(opts: { ws?: string }): string | undefined {
+  return opts.ws ?? (process.env.SAINSBURYS_WS || undefined);
 }
 
 function fail(err: unknown): never {
@@ -99,13 +105,13 @@ program
     try {
       if (username && password) {
         console.error(
-          `Credential login for ${username}${opts.ws ? ` via remote browser ${opts.ws}` : " (headless local browser)"}...`,
+          `Credential login for ${username}${wsEndpoint(opts) ? ` via remote browser ${wsEndpoint(opts)}` : " (headless local browser)"}...`,
         );
         const { sessionPath } = await credentialLogin({
           username,
           password,
           mfaCode: cmdOpts.mfa,
-          ws: opts.ws,
+          ws: wsEndpoint(opts),
           headed: opts.headed,
           verbose: opts.verbose,
           sessionPath: opts.session,
@@ -114,8 +120,8 @@ program
         console.log(`Session saved to ${sessionPath}`);
       } else {
         const { sessionPath } = await interactiveLogin({
-          ws: opts.ws,
-          headed: opts.headed || !opts.ws,
+          ws: wsEndpoint(opts),
+          headed: opts.headed || !wsEndpoint(opts),
           verbose: opts.verbose,
           sessionPath: opts.session,
           executablePath: findChromiumExecutable(),
@@ -322,9 +328,9 @@ slots
         }));
         via = "api";
       } catch (err) {
-        if (!opts.ws && !opts.headed) throw err;
+        if (!wsEndpoint(opts) && !opts.headed) throw err;
         const domSlots = await listSlotsViaBrowser({
-          ws: opts.ws,
+          ws: wsEndpoint(opts),
           headed: opts.headed,
           postcode: o.postcode,
         });
@@ -359,9 +365,9 @@ slots
           console.error(`direct API failed (${String(err).slice(0, 120)}); trying UI...`);
         }
       }
-      if (!opts.ws && !opts.headed) throw new Error("UI booking needs --ws or --headed");
+      if (!wsEndpoint(opts) && !opts.headed) throw new Error("UI booking needs --ws or --headed");
       const result = await bookSlotViaBrowser({
-        ws: opts.ws,
+        ws: wsEndpoint(opts),
         headed: opts.headed,
         match: new RegExp(slotIdOrPattern, "i"),
         dryRun: o.dryRun,
