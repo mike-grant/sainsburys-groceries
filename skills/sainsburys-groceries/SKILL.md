@@ -1,11 +1,18 @@
 ---
 name: sainsburys-groceries
-description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Bun + Node. No browser needed after one-time auth (impersonated-TLS transport); remote CDP via --ws incl. LightPanda supported.
+description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Node (>=22.18) or Bun. No browser needed after one-time auth (impersonated-TLS transport); remote CDP via --ws incl. LightPanda supported.
+license: MIT
 ---
 
 # Sainsbury's Groceries CLI
 
-Run everything through `bun <repo>/src/index.ts` (or `bun run cli` in the repo). Add `--json` for machine-readable output on every command.
+Find the repo root (the directory containing `src/index.ts`; installed skills
+live under `skills/sainsburys-groceries/`). Run everything through:
+
+- Node: `node <repo>/src/index.ts <cmd>`
+- Bun:  `bun <repo>/src/index.ts <cmd>`
+
+Add `--json` for machine-readable output on every command.
 
 ## Authentication (one-time)
 

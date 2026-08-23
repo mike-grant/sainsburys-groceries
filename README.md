@@ -1,67 +1,44 @@
 # sainsburys-groceries
 
+[![skills.sh installs](https://skills.sh/b/mike-grant/sainsburys-groceries)](https://skills.sh/mike-grant/sainsburys-groceries)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Runtime-agnostic (Node & Bun) TypeScript CLI + agent skill for automating
 [Sainsbury's Groceries](https://www.sainsburys.co.uk/gol-ui/): previous orders,
 delivery slot booking, basket management, and amending your upcoming order.
+No browser required after one-time login.
 
-## Runtimes: Node & Bun
+> **Personal-use tool.** Talks to Sainsbury's unofficial internal API with your
+> own account. Nothing here places orders or charges you — checkout is
+> intentionally out of scope.
 
-One transport, no split. [`koonjs`](https://github.com/scrape-hub/koon) (Rust +
-BoringSSL via napi-rs) reproduces Chrome's TLS/HTTP-2 fingerprints and runs
-natively under **both** Node and Bun — single process either way, ~0.8s/command.
+## Install the agent skill (one command)
 
-| Invocation | Notes |
-|---|---|
-| `node src/index.ts ...` / installed bin | in-process |
-| `bun src/index.ts ...` / `bunx --bun sainsburys` | in-process |
-
-Requirements: Node >= 22.18 or Bun >= 1.1.
-
-## Installing in containers
-
-No browser is needed in the image — auth cookies come in via mount or env:
-
-```dockerfile
-# any node:*-slim base works; koonjs ships napi prebuilds for linux x64/arm64
-RUN npm i -g sainsburys-groceries-cli
-```
-
-Auth options inside the container:
+Works with Claude Code, Codex, Cursor, Copilot, Windsurf, Gemini CLI, Cline,
+OpenCode, Goose and more:
 
 ```bash
-# 1) mount a session file prepared on your Mac (one-time `sainsburys login`)
-docker run -v ~/.sainsburys:/home/shopper/.sainsburys:ro ...
-
-# 2) env vars (CI-friendly)
-docker run -e SAINSBURYS_COOKIE="WC_AUTHENTICATION_...=...; JSESSIONID=..." \
-           -e SAINSBURYS_WCAUTHTOKEN="..." ...
+npx skills add mike-grant/sainsburys-groceries
 ```
 
-Set `TZ=Europe/London` for sane slot times. Sessions/cookies are gitignored
-and dockerignored.
-
-## How it talks to Sainsbury's
-
-Akamai (their WAF) denies non-browser TLS fingerprints — plain `fetch` from Bun/Node/curl
-gets `403 Access Denied` at the edge — and also denies `HeadlessChrome` user agents.
-
-The CLI therefore offers these transports:
-
-| Transport | Flag | Browser needed | Notes |
-|---|---|---|---|
-| **koonjs** (default) | — | **No** | Rust/BoringSSL Chrome JA3+H2 impersonation, cookie jar; native under Node & Bun |
-| remote CDP page | `--ws ws://host:9222` | Remote only | In-page `fetch()` on a warmed groceries SPA page in any CDP browser incl. LightPanda |
-| local Chromium page | `--browser` (+`--headed`) | Yes, local | Same as above with auto-discovered Playwright Chromium |
-| raw fetch | `--http` | No | Usually edge-denied; kept for tolerant networks/proxies |
-
-Only `login` needs a visible browser (you type credentials + MFA). Everything else is
-plain authenticated REST over an impersonated TLS session.
-
-## Install
+Prefer manual? Symlink it yourself:
 
 ```bash
-bun install
-bun src/index.ts --help        # or: bun link && sainsburys --help
+git clone https://github.com/mike-grant/sainsburys-groceries
+./sainsburys-groceries/scripts/install-skill.sh   # links into ~/.claude/skills, ~/.agents/skills
+```
+
+Then just ask your agent: *"what did I order from Sainsbury's last week?"* or
+*"add oat milk and eggs to my Sainsbury's basket"* — the SKILL.md teaches it the
+exact commands and safety semantics.
+
+## Install the CLI
+
+```bash
+npm i -g sainsburys-groceries-cli      # Node >= 22.18
+# or run straight from a clone:
+bun src/index.ts --help                # Bun >= 1.1
+node src/index.ts --help               # same file, same features
 ```
 
 ## Authenticate (one-time)
@@ -69,12 +46,13 @@ bun src/index.ts --help        # or: bun link && sainsburys --help
 ```bash
 sainsburys login                 # visible local window; complete MFA yourself
 sainsburys login --ws ws://host:9222   # same, in a remote CDP browser
-# or, no browser:
+# or, no browser at all:
 sainsburys import-cookie-header "WC_AUTHENTICATION_...=...; JSESSIONID=..." -t <wcauthtoken>
 # or env: SAINSBURYS_COOKIE / SAINSBURYS_WCAUTHTOKEN
 ```
 
-Session persists to `~/.sainsburys/session.json` (chmod 600). Check with `whoami`.
+Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
+`sainsburys whoami`, re-login roughly weekly when it expires.
 
 ## Commands
 
@@ -87,7 +65,7 @@ Session persists to `~/.sainsburys/session.json` (chmod 600). Check with `whoami
 | slots | `slots reservation` · `slots list [-p POSTCODE]` · `slots book <id\|regex> [--dry-run]` · `slots cancel` |
 | diagnostics | `doctor api` · `doctor lightpanda [--ws ws://127.0.0.1:9222]` |
 
-Global flags: `--json -v --ws <url> --headed --http --session <path>`.
+Global flags: `--json -v --ws <url> --headed --browser --http --session <path>`.
 
 ## Amend semantics
 
@@ -95,6 +73,49 @@ With a booked slot, adding items amends the **upcoming order** (Sainsbury's mode
 pre-checkout amendments this way); without one, items go to the plain basket. The CLI
 prints which target was used (`-> next-delivery` / `-> basket`). Checkout/payment is
 intentionally out of scope.
+
+## How it talks to Sainsbury's
+
+Akamai (their WAF) denies non-browser TLS fingerprints — plain `fetch` from
+Bun/Node/curl gets `403 Access Denied` at the edge — and also denies
+`HeadlessChrome` user agents.
+
+| Transport | Flag | Browser needed | Notes |
+|---|---|---|---|
+| **koonjs** (default) | — | **No** | Rust/BoringSSL Chrome JA3+H2 impersonation via napi-rs; native under Node & Bun |
+| remote CDP page | `--ws ws://host:9222` | Remote only | In-page `fetch()` on a warmed groceries SPA page in any CDP browser incl. LightPanda |
+| local Chromium page | `--browser` (+`--headed`) | Yes, local | Same as above with auto-discovered Playwright Chromium |
+| raw fetch | `--http` | No | Usually edge-denied; kept for tolerant networks/proxies |
+
+Only `login` needs a visible browser (you type credentials + MFA). Everything else is
+plain authenticated REST over an impersonated TLS session (~0.8s per command).
+
+### Runtimes
+
+One transport, no split — [`koonjs`](https://github.com/scrape-hub/koon) runs
+natively under both runtimes:
+
+| Invocation | Notes |
+|---|---|
+| `node src/index.ts ...` / installed bin | in-process (Node >= 22.18 type-stripping) |
+| `bun src/index.ts ...` / `bunx --bun sainsburys` | in-process |
+
+### Containers
+
+No browser in the image; auth comes in via mount or env:
+
+```dockerfile
+# any node:*-slim base works; koonjs ships napi prebuilds for linux x64/arm64
+RUN npm i -g sainsburys-groceries-cli
+```
+
+```bash
+docker run -v ~/.sainsburys:/home/shopper/.sainsburys:ro ...          # mounted session
+docker run -e SAINSBURYS_COOKIE="..." -e SAINSBURYS_WCAUTHTOKEN="..." # or env
+```
+
+Set `TZ=Europe/London` for sane slot times. Sessions/cookies are gitignored
+and dockerignored.
 
 ## LightPanda
 
@@ -109,18 +130,15 @@ sainsburys doctor lightpanda
 Known caveats (see lightpanda-io/browser issues): `/json/list` may be missing,
 Playwright-over-Bun WebSocket instability, no screenshots/PDF rendering.
 
-## Agent skill
-
-```bash
-./scripts/install-skill.sh   # symlinks into ~/.claude/skills and ~/.agents/skills
-```
-
 ## Tests
 
 ```bash
-bun test          # offline unit tests
-bun run typecheck # tsc --noEmit
+bun test           # offline unit tests
+bun run typecheck  # tsc --noEmit
 ```
 
-Unofficial, undocumented APIs — for personal use with your own account. Endpoints can
-change without notice; `doctor api` helps diagnose.
+## Disclaimer
+
+Unofficial, undocumented APIs — for personal use with your own account only.
+Endpoints can change without notice; `doctor api` helps diagnose. Not
+affiliated with Sainsbury's Supermarkets Ltd.
