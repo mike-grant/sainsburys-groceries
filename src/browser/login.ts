@@ -108,6 +108,23 @@ function promptMfa(): Promise<string> {
 }
 
 /**
+ * The OneTrust consent SDK re-renders a full-page dark filter between login
+ * steps, intercepting all pointer events. Remove it outright rather than
+ * hoping the (often invisible) banner buttons are clickable.
+ */
+async function stripConsentOverlay(page: import("playwright-core").Page): Promise<void> {
+  await dismissCookieConsent(page).catch(() => {});
+  await page
+    .evaluate(() => {
+      document.getElementById("onetrust-consent-sdk")?.remove();
+      document
+        .querySelectorAll(".onetrust-pc-dark-filter, .onetrust-banner-sdk, #onetrust-banner-sdk")
+        .forEach((el) => el.remove());
+    })
+    .catch(() => {});
+}
+
+/**
  * Credential-driven headless login: fills the real login form inside a
  * headless/remote browser. Credentials come from env (SAINSBURYS_USERNAME /
  * SAINSBURYS_PASSWORD) — never argv. If Sainsbury's challenges with an MFA
@@ -130,7 +147,7 @@ export async function credentialLogin(opts: CredentialLoginOptions): Promise<Log
     step("opening account.sainsburys.co.uk/gol/login ...");
     const page = await bs.context.newPage();
     await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await dismissCookieConsent(page).catch(() => {});
+    await stripConsentOverlay(page);
     step(`page loaded: "${await page.title().catch(() => "?")}"`);
 
     step("filling credentials...");
@@ -145,21 +162,37 @@ export async function credentialLogin(opts: CredentialLoginOptions): Promise<Log
 
     // Give the challenge (if any) time to render, then handle MFA.
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+    await stripConsentOverlay(page);
     step(`post-submit page: "${await page.title().catch(() => "?")}" (${page.url().slice(0, 80)})`);
-    const mfaField = page
-      .locator(
-        'input[autocomplete="one-time-code"], input[inputmode="numeric"], [data-testid*="otp" i], [data-testid*="code" i]',
-      )
-      .first();
-    if (await mfaField.isVisible({ timeout: 8_000 }).catch(() => false)) {
+
+    // MFA input can lag the navigation slightly; poll rather than single-check.
+    const mfaSelector =
+      'input[autocomplete="one-time-code"], input[inputmode="numeric"], [data-testid*="otp" i], [data-testid*="code" i]';
+    let mfaSeen = false;
+    for (let waited = 0; waited < 20_000; waited += 2000) {
+      if (await page.locator(mfaSelector).first().isVisible({ timeout: 1000 }).catch(() => false)) {
+        mfaSeen = true;
+        break;
+      }
+      await stripConsentOverlay(page);
+      if (await waitUntilAuthed(bs.context, Date.now() + 1))
+        break; // signed in without MFA
+    }
+
+    if (mfaSeen) {
       step("MFA input detected");
+      await stripConsentOverlay(page);
       const code = opts.mfaCode ?? (await promptMfa());
-      await mfaField.fill(code);
+      await page.locator(mfaSelector).first().fill(code);
+      await stripConsentOverlay(page);
       await page
-        .locator('button[type="submit"], button[data-testid*="verify" i], button[data-testid*="submit" i]')
+        .locator(
+          'button[data-testid="submit-code"], button[type="submit"], button[data-testid*="verify" i]',
+        )
         .first()
         .click();
       step("MFA code submitted; completing sign-in...");
+      await stripConsentOverlay(page);
     } else if (opts.verbose) {
       step("no MFA input seen; waiting for auth cookies...");
     }
