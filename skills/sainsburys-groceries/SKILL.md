@@ -6,13 +6,30 @@ license: MIT
 
 # Sainsbury's Groceries CLI
 
-Find the repo root (the directory containing `src/index.ts`; installed skills
-live under `skills/sainsburys-groceries/`). Run everything through:
+This skill is instructions only — the CLI is installed separately.
 
-- Node: `node <repo>/src/index.ts <cmd>`
-- Bun:  `bun <repo>/src/index.ts <cmd>`
+## Running commands
 
-Add `--json` for machine-readable output on every command.
+Run everything through the `sainsburys` binary:
+
+```bash
+sainsburys <command>
+```
+
+Add `--json` to any command for machine-readable output.
+
+**If `sainsburys` is not on PATH**, install it (one command, no clone):
+
+```bash
+npm i -g github:mike-grant/sainsburys-groceries
+```
+
+**If a local clone exists** (directory containing `src/index.ts`), you can
+instead run it in place — same features:
+
+```bash
+node <repo>/src/index.ts <command>   # or: bun <repo>/src/index.ts <command>
+```
 
 ## Authentication (one-time)
 
@@ -48,18 +65,10 @@ Global flags: `--json`, `-v`, `--ws <url>` (remote CDP endpoint), `--headed`, `-
 
 ## Behavioural notes for agents
 
+- **Auth first**: if a command fails with a session error, ask the user to complete
+  `sainsburys login` before anything else; verify with `whoami`.
 - **Amend semantics**: with a booked delivery slot, adding items amends the *upcoming order* (that is how Sainsbury's models it pre-checkout). Without a booked slot, items go to the plain basket. The CLI reports which happened (`-> next-delivery` vs `-> basket`). Never place/charge orders; checkout is intentionally out of scope.
-- **Anonymous endpoints return HTTP 200 with empty payloads** — never treat status alone as success; use `whoami`/payload checks.
+- **Anonymous endpoints return HTTP 200 with guest payloads** (`user_id: -1002`) — never treat status alone as success; use `whoami`/payload checks.
 - **Transport**: default = koonjs impersonated-TLS (Rust/BoringSSL, native under both Node and Bun, no browser, ~1s/command). `--ws <url>` switches to a remote CDP browser (Playwright server or LightPanda); `--browser` forces local Chromium; `--http` is raw fetch (Akamai-blocked on most networks). Only `login` needs a visible browser (MFA).
-- **Amend semantics**: with a booked delivery slot, adding items amends the *upcoming order* (that is how Sainsbury's models it pre-checkout). Without a booked slot, items go to the plain basket. The CLI reports which happened (`-> next-delivery` vs `-> basket`). Never place/charge orders; checkout is intentionally out of scope.
 - **Ambiguity**: when adding items by name, prefer showing the user top matches (`search`) before `add` if multiple plausible products exist.
 - Slot booking via UI click-through is experimental; use `--dry-run` first.
-
-## Setup
-
-```bash
-bun install          # deps
-bun src/index.ts --help
-```
-
-Optional local-browser binary is auto-discovered from the Playwright cache; override with `SAINSBURYS_CHROMIUM_PATH`.
