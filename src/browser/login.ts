@@ -95,15 +95,18 @@ export interface CredentialLoginOptions extends ConnectOptions {
 function promptMfa(): Promise<string> {
   return new Promise((resolve) => {
     process.stdout.write("Enter the MFA code sent to you: ");
-    let buf = "";
-    const onData = (d: Buffer) => {
-      buf += d.toString();
-      if (buf.includes("\n")) {
-        process.stdin.removeListener("data", onData);
-        resolve(buf.trim());
+    // once() + pause(): leaving stdin flowing keeps the process alive after
+    // login completes — a classic CLI hang.
+    process.stdin.once("data", (buf: Buffer) => {
+      const code = buf.toString().trim();
+      try {
+        process.stdin.pause();
+        (process.stdin as unknown as { unref?: () => void }).unref?.();
+      } catch {
+        // non-TTY edge cases
       }
-    };
-    process.stdin.on("data", onData);
+      resolve(code);
+    });
   });
 }
 

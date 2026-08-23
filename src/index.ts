@@ -20,7 +20,7 @@ import {
 } from "./browser/context.ts";
 import { interactiveLogin, credentialLogin } from "./browser/login.ts";
 import { bookSlotViaBrowser, listSlotsViaBrowser } from "./browser/slots.ts";
-import { getLatestOrder, getOrders } from "./services/orders.ts";
+import { findInOrders, getLatestOrder, getOrders } from "./services/orders.ts";
 import { smartAdd } from "./services/basket.ts";
 import { doctorApi, doctorLightpanda } from "./services/doctor.ts";
 import { fmtPrice, printTable, priceOf, truncate } from "./util/format.ts";
@@ -263,30 +263,97 @@ basket
 
 const orders = program.command("orders").description("previous & upcoming orders");
 
+function ordersCtx() {
+  const opts = program.opts();
+  return {
+    session: resolveSession(opts.session),
+    browser: {
+      ws: wsEndpoint(opts),
+      headed: opts.headed,
+      verbose: opts.verbose,
+      executablePath: findChromiumExecutable(),
+      sessionPath: opts.session,
+    },
+  };
+}
+
 orders
   .command("list")
   .alias("history")
   .option("-n, --limit <n>", "max orders shown", "10")
-  .action(async (o: { limit: string }) =>
-    withClient(async (client) => {
-      const { orders: list, via } = await getOrders(client);
-      const rows = list.slice(0, Number(o.limit));
+  .action(async (o: { limit: string }) => {
+    const oc = await openClient();
+    try {
+      const limit = Number(o.limit);
+      const pageSize = Math.min(limit || 10, 10);
+      const pages = Math.ceil(limit / pageSize) || 1;
+      let all: Awaited<ReturnType<typeof getOrders>>["orders"] = [];
+      let via = "";
+      for (let p = 1; p <= pages; p++) {
+        const r = await getOrders(oc.client, ordersCtx(), { pageNumber: p, pageSize });
+        via = r.via;
+        all = all.concat(r.orders);
+        if (r.orders.length < pageSize) break;
+      }
+      const rows = all.slice(0, limit);
       if (program.opts().json) return console.log(JSON.stringify({ via, orders: rows }, null, 2));
       console.error(`via: ${via}`);
-      printTable(rows, ["id", "status", "delivery_date", "total", "amendable"]);
-    }),
-  );
+      printTable(
+        rows.map((r2) => ({ ...r2, raw: undefined })),
+        ["id", "status", "delivery_date", "total", "amendable"],
+      );
+    } catch (err) {
+      fail(err);
+    } finally {
+      await oc.close?.();
+    }
+  });
+
+orders
+  .command("find")
+  .description('search line items across previous orders, e.g. orders find "mushy peas" --pages 3')
+  .argument("<query>")
+  .option("-p, --pages <n>", "how many history pages to scan (10 orders/page)", "3")
+  .action(async (query: string, o: { pages: string }) => {
+    const oc = await openClient();
+    try {
+      const res = await findInOrders(oc.client, ordersCtx(), query, {
+        maxPages: Number(o.pages),
+      });
+      if (program.opts().json) return console.log(JSON.stringify(res, null, 2));
+      console.error(`scanned ${res.scanned} orders (via ${res.via})`);
+      if (!res.matches.length) return console.log(`no matches for "${query}"`);
+      for (const m of res.matches) {
+        console.log(
+          `\n${m.order.id}  ${m.order.delivery_date?.slice(0, 10) ?? "?"}  total ${fmtPrice(m.order.total)}:`,
+        );
+        for (const it of m.items)
+          console.log(
+            `   • ${it.quantity}${it.uom ?? ""} ${truncate(it.name, 60)} (${it.uid}) ${fmtPrice(it.sub_total)}`,
+          );
+      }
+    } catch (err) {
+      fail(err);
+    } finally {
+      await oc.close?.();
+    }
+  });
 
 orders
   .command("latest")
   .description("most recent / next order")
-  .action(async () =>
-    withClient(async (client) => {
-      const latest = await getLatestOrder(client);
+  .action(async () => {
+    const oc = await openClient();
+    try {
+      const latest = await getLatestOrder(oc.client, ordersCtx());
       if (program.opts().json) return console.log(JSON.stringify(latest, null, 2));
       printTable([{ ...latest, raw: undefined }], ["id", "status", "delivery_date", "total", "amendable"]);
-    }),
-  );
+    } catch (err) {
+      fail(err);
+    } finally {
+      await oc.close?.();
+    }
+  });
 
 const amend = program.command("amend").description("amend an existing/upcoming order");
 

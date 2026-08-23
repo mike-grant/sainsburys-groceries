@@ -1,6 +1,6 @@
 ---
 name: sainsburys-groceries
-description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Node (>=22.18) or Bun. No browser needed after one-time auth (impersonated-TLS transport); remote CDP via --ws incl. LightPanda supported.
+description: Automate Sainsbury's Groceries from the CLI - retrieve previous orders, book/cancel delivery slots, search products, manage the basket and amend the upcoming order. Use when the user asks about their Sainsbury's orders, delivery slots, or shopping basket. Requires Node (>=20) or Bun. No browser needed after one-time auth (impersonated-TLS transport); remote CDP via --ws incl. LightPanda supported.
 license: MIT
 ---
 

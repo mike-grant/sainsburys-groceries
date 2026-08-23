@@ -69,6 +69,7 @@ Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
 
 | Task | Command |
 |---|---|
+| search order history | `orders find "mushy peas" --pages 3` |
 | orders history | `orders list [-n 10]` / `orders latest` |
 | search | `search "oat milk" -n 5 [--json]` |
 | basket | `basket view` · `basket add "milk" -q 2` · `basket remove <item_uid>` |
@@ -108,7 +109,7 @@ natively under both runtimes:
 
 | Invocation | Notes |
 |---|---|
-| `node src/index.ts ...` / installed bin | in-process (Node >= 22.18 type-stripping) |
+| `node src/index.ts ...` / installed bin | in-process (Node >= 20 type-stripping) |
 | `bun src/index.ts ...` / `bunx --bun sainsburys` | in-process |
 
 ### Containers
