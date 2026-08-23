@@ -6,30 +6,26 @@ license: MIT
 
 # Sainsbury's Groceries CLI
 
-This skill is instructions only — the CLI is installed separately.
+This skill is instructions only — the CLI is a separate one-time setup.
 
-## Running commands
+## First run (bootstrap)
 
-Run everything through the `sainsburys` binary:
-
-```bash
-sainsburys <command>
-```
-
-Add `--json` to any command for machine-readable output.
-
-**If `sainsburys` is not on PATH**, install it (one command, no clone):
+If `sainsburys` is not on PATH, run the bundled installer once:
 
 ```bash
-npm i -g github:mike-grant/sainsburys-groceries
+bash "<this-skill-dir>/scripts/bootstrap.sh"
 ```
 
-**If a local clone exists** (directory containing `src/index.ts`), you can
-instead run it in place — same features:
+It installs the CLI globally via npm (`npm i -g github:mike-grant/sainsburys-groceries`).
+Requires Node.js >= 22.18. After that, all commands are plain `sainsburys <command>`.
+
+**Already cloned the repo?** You can skip the installer and run in place:
 
 ```bash
 node <repo>/src/index.ts <command>   # or: bun <repo>/src/index.ts <command>
 ```
+
+Add `--json` to any command for machine-readable output.
 
 ## Authentication (one-time)
 
