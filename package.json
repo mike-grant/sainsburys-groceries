@@ -30,8 +30,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "impers": "^0.1.0",
-    "koffi": "^3.1.6"
+    "koonjs": "^0.8.1"
   },
   "optionalDependencies": {
     "playwright-core": "^1.49.0"

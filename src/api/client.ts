@@ -107,12 +107,13 @@ export class GroceriesClient {
   // ---- customer ---------------------------------------------------------------
 
   /**
-   * NOTE: anonymous users get HTTP 200 + empty payload on authed endpoints,
-   * so "ok" must be judged by content, not status.
+   * NOTE: anonymous users get HTTP 200 with a guest payload (user_id like
+   * -1002) on authed endpoints, so "ok" must be judged by content.
    */
   async getProfile(): Promise<Record<string, unknown>> {
     const profile = await this.request<Record<string, unknown>>("GET", "/customer/v1/customer/profile");
-    if (!profile || Object.keys(profile).length === 0) {
+    const userId = Number(profile?.user_id ?? 0);
+    if (!profile || Object.keys(profile).length === 0 || !Number.isFinite(userId) || userId <= 0) {
       throw new NoSessionError();
     }
     return profile;

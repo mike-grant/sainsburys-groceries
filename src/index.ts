@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { GroceriesClient } from "./api/client.ts";
 import { FetchTransport, PageTransport } from "./api/transport.ts";
-import { ImpersTransport } from "./api/impers.ts";
+import { KoonTransport } from "./api/koon.ts";
 import { defaultSessionPath } from "./config.ts";
 import {
   parseCookieHeader,
@@ -63,54 +63,9 @@ async function openClient(): Promise<OpenedClient> {
     };
   }
 
-  // Default: impersonated-TLS (no browser needed post-auth).
-  // Under Bun, impers/koffi crashes -> persistent Node sidecar.
-  // Under Node, import impers directly in-process.
-  if (!opts.browser) {
-    const isBun = typeof Bun !== "undefined";
-    if (!isBun) {
-      try {
-        const { ImpersDirectTransport } = await import("./api/impers-direct.ts");
-        const transport = new ImpersDirectTransport(session);
-        return {
-          client: new GroceriesClient({ session, transport }),
-          close: () => transport.close(),
-        };
-      } catch (err) {
-        console.error(`impers unavailable (${String(err).slice(0, 100)}); falling back to browser`);
-      }
-    } else if (await ImpersTransport.nodeAvailable()) {
-      const transport = new ImpersTransport(session);
-      try {
-        return {
-          client: new GroceriesClient({ session, transport }),
-          close: () => transport.close(),
-        };
-      } catch (err) {
-        console.error(`impers sidecar unavailable (${String(err).slice(0, 120)}); falling back to browser`);
-      }
-    } else if (!opts.ws) {
-      console.error(
-        "note: running under Bun but Node was not found for the impers sidecar; " +
-          "falling back to local Chromium. Prefer `node src/index.ts` (in-process, faster) " +
-          "or install Node alongside Bun.",
-      );
-    }
-  }
-
-  const executablePath = findChromiumExecutable();
-  const bs = await connectBrowser({
-    ws: opts.ws,
-    headed: opts.headed,
-    verbose: opts.verbose,
-    executablePath,
-  });
-  if (session) await importSessionToContext(bs.context, session);
-  const page = await openWarmedGroceriesPage(bs.context);
-  return {
-    client: new GroceriesClient({ session, transport: new PageTransport(page) }),
-    close: () => bs.close(),
-  };
+  // Default: koonjs impersonated-TLS transport (works under Node AND Bun).
+  const koon = new KoonTransport(session);
+  return { client: new GroceriesClient({ session, transport: koon }), close: () => koon.close() };
 }
 
 function fail(err: unknown): never {
