@@ -44,5 +44,11 @@
   ],
   "allowScripts": {
     "koffi@3.1.6": true
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mike-grant/sainsburys-groceries.git"
+  },
+  "bugs": "https://github.com/mike-grant/sainsburys-groceries/issues",
+  "homepage": "https://github.com/mike-grant/sainsburys-groceries#readme"
 }
