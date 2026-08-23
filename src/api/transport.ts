@@ -18,14 +18,21 @@ export interface Transport {
 }
 
 export class ApiError extends Error {
+  status: number;
+  url: string;
+  body?: string;
+
   constructor(
-    public status: number,
-    public url: string,
+    status: number,
+    url: string,
     message: string,
-    public body?: string,
+    body?: string,
   ) {
     super(`HTTP ${status} on ${url}: ${message}`);
     this.name = "ApiError";
+    this.status = status;
+    this.url = url;
+    this.body = body;
   }
   get looksBlocked(): boolean {
     return /access denied|captcha/i.test(this.body ?? "");
@@ -53,7 +60,11 @@ type PWPage = import("playwright-core").Page;
  * browser (`--ws`, incl. LightPanda).
  */
 export class PageTransport implements Transport {
-  constructor(private page: PWPage) {}
+  private page: PWPage;
+
+  constructor(page: PWPage) {
+    this.page = page;
+  }
 
   async request(
     method: string,
@@ -81,7 +92,11 @@ export class PageTransport implements Transport {
 
 /** Fallback direct transport (works only on networks where Akamai tolerates non-browser TLS, e.g. some UK residential setups or via proxy). */
 export class FetchTransport implements Transport {
-  constructor(private session: Session | null) {}
+  private session: Session | null;
+
+  constructor(session: Session | null) {
+    this.session = session;
+  }
 
   async request(
     method: string,

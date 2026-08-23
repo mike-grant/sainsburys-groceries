@@ -22,6 +22,8 @@ interface PendingRequest {
  * no-browser transport. koffi crashes under Bun itself, hence the sidecar.
  */
 export class ImpersTransport implements Transport {
+  private session: Session | null;
+  private nodeBin: string;
   private proc: import("bun").Subprocess<"pipe", "pipe", "pipe"> | null = null;
   private pending = new Map<number, PendingRequest>();
   private nextId = 1;
@@ -29,10 +31,10 @@ export class ImpersTransport implements Transport {
   private ready: Promise<void> | null = null;
   private stderrTail: string[] = [];
 
-  constructor(
-    private session: Session | null,
-    private nodeBin = process.env.IMPERS_NODE_BIN ?? "node",
-  ) {}
+  constructor(session: Session | null, nodeBin = process.env.IMPERS_NODE_BIN ?? "node") {
+    this.session = session;
+    this.nodeBin = nodeBin;
+  }
 
   static async nodeAvailable(nodeBin?: string): Promise<boolean> {
     try {

@@ -63,16 +63,32 @@ async function openClient(): Promise<OpenedClient> {
     };
   }
 
-  // Default: impersonated-TLS sidecar (no browser needed post-auth).
-  if (!opts.browser && (await ImpersTransport.nodeAvailable())) {
-    const transport = new ImpersTransport(session);
-    try {
-      return {
-        client: new GroceriesClient({ session, transport }),
-        close: () => transport.close(),
-      };
-    } catch (err) {
-      console.error(`impers sidecar unavailable (${String(err).slice(0, 120)}); falling back to browser`);
+  // Default: impersonated-TLS (no browser needed post-auth).
+  // Under Bun, impers/koffi crashes -> persistent Node sidecar.
+  // Under Node, import impers directly in-process.
+  if (!opts.browser) {
+    const isBun = typeof Bun !== "undefined";
+    if (!isBun) {
+      try {
+        const { ImpersDirectTransport } = await import("./api/impers-direct.ts");
+        const transport = new ImpersDirectTransport(session);
+        return {
+          client: new GroceriesClient({ session, transport }),
+          close: () => transport.close(),
+        };
+      } catch (err) {
+        console.error(`impers unavailable (${String(err).slice(0, 100)}); falling back to browser`);
+      }
+    } else if (await ImpersTransport.nodeAvailable()) {
+      const transport = new ImpersTransport(session);
+      try {
+        return {
+          client: new GroceriesClient({ session, transport }),
+          close: () => transport.close(),
+        };
+      } catch (err) {
+        console.error(`impers sidecar unavailable (${String(err).slice(0, 120)}); falling back to browser`);
+      }
     }
   }
 
