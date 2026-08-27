@@ -71,6 +71,36 @@ Global flags: `--json`, `-v`, `--ws <url>` (remote CDP endpoint), `--cdp-only`, 
 
 On Raspberry Pi, set `SAINSBURYS_CDP_ONLY=1` and `SAINSBURYS_WS=ws://127.0.0.1:9222` (or pass `--cdp-only --ws ...`) to force every API command through the CDP browser and avoid the optional native `koonjs` transport. For agent-driven MFA, use `login --mfa-file <path>`; the command emits `MFA_REQUIRED` and resumes when the file contains the one-time code.
 
+### MFA protocol for agents (do not restart login)
+
+MFA is a continuation of the already-running login process. Starting `login`
+again will submit the credentials again and can invalidate the first code or
+generate a new challenge.
+
+1. Choose a new, empty code-file path and start exactly one login process. Keep
+   it running; for a shell agent, run it in the background and retain its log:
+   ```bash
+   MFA_FILE=/tmp/sainsburys-mfa.$$
+   rm -f "$MFA_FILE"
+   SAINSBURYS_USERNAME=... SAINSBURYS_PASSWORD=... \
+     sainsburys --cdp-only --ws "$SAINSBURYS_WS" login --mfa-file "$MFA_FILE" \
+     > /tmp/sainsburys-login.log 2>&1 &
+   ```
+2. Watch the login output for `MFA_REQUIRED`. Only then ask the user for the
+   code. Do not ask the user to run `login` again.
+3. When the user supplies the code, write it to the same file. This releases
+   the waiting process, which submits the code in the existing browser page,
+   captures the authenticated cookies, and saves `session.json`:
+   ```bash
+   printf '%s\n' '<code from user>' > "$MFA_FILE"
+   ```
+4. Wait for `Session saved to ...`, then verify with `whoami`. Reuse the saved
+   session and CDP endpoint for subsequent commands.
+
+If the login process exits or times out before the code is supplied, report
+that the MFA challenge expired and begin a new login deliberately. Never start
+a second login while the first one is waiting for its code.
+
 ## Behavioural notes for agents
 
 - **Auth first**: if a command fails with a session error, ask the user to complete

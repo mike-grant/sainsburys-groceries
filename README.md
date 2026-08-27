@@ -108,6 +108,26 @@ Bun/Node/curl gets `403 Access Denied` at the edge — and also denies
 On Raspberry Pi, use `--cdp-only` with a Chromium-compatible CDP endpoint. This
 prevents the CLI from trying to load the optional native `koonjs` module.
 
+### Agent MFA handoff
+
+The MFA code is entered into the already-running login process. Do not invoke
+`login` a second time after the code arrives, because that can create a new
+challenge. Start one process with a new empty file, keep it running, and have
+the agent ask you for the code when it sees `MFA_REQUIRED`:
+
+```bash
+MFA_FILE=/tmp/sainsburys-mfa.$$
+rm -f "$MFA_FILE"
+SAINSBURYS_USERNAME=... SAINSBURYS_PASSWORD=... \
+  sainsburys --cdp-only --ws "$SAINSBURYS_WS" login --mfa-file "$MFA_FILE" \
+  > /tmp/sainsburys-login.log 2>&1 &
+# after the agent receives the MFA code from you:
+printf '%s\n' '<code>' > "$MFA_FILE"
+```
+
+The waiting process submits the code in the existing browser page, saves the
+session, and subsequent CDP commands reuse it. Verify with `sainsburys --cdp-only whoami`.
+
 In the normal mode only `login` needs a visible browser; everything else is plain
 authenticated REST over an impersonated TLS session (~0.8s per command). In
 `--cdp-only` mode, all commands intentionally use the CDP browser's session.
