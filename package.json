@@ -1,6 +1,6 @@
 {
   "name": "sainsburys-groceries-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Sainsbury's Groceries CLI + agent skill: previous orders, slot booking, amending orders. Runtime-agnostic TypeScript (Node & Bun). Impersonated-TLS transport passes Akamai with no browser after one-time auth; remote CDP (--ws, incl. LightPanda) supported.",
   "type": "module",
   "license": "MIT",
@@ -32,10 +32,10 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "koonjs": "^0.8.1"
+    "playwright-core": "^1.49.0"
   },
   "optionalDependencies": {
-    "playwright-core": "^1.49.0"
+    "koonjs": "^0.8.1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.10",

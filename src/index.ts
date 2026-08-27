@@ -34,6 +34,7 @@ program
   .option("--json", "machine-readable output", false)
   .option("-v, --verbose", "verbose logging to stderr", false)
   .option("--ws <url>", "remote CDP WebSocket endpoint (remote Playwright / LightPanda)")
+  .option("--cdp-only", "require CDP browser transport; never load or use koonjs", false)
   .option("--headed", "show the local browser window", false)
   .option("--browser", "force local Chromium page transport instead of impers sidecar", false)
   .option("--http", "use raw fetch (denied by Akamai TLS fingerprinting on most networks)", false)
@@ -44,10 +45,15 @@ interface OpenedClient {
   close?: () => Promise<void>;
 }
 
-/** Build a working client. Priority: --ws remote browser > --browser local > impers sidecar > --http fetch. */
+/** Build a working client. Priority: CDP > local browser > koon > raw fetch. */
 async function openClient(): Promise<OpenedClient> {
   const opts = program.opts();
   const session = resolveSession(opts.session);
+  const cdpOnly = opts.cdpOnly || process.env.SAINSBURYS_CDP_ONLY === "1";
+
+  if (cdpOnly && opts.http) {
+    throw new Error("--cdp-only cannot be combined with --http");
+  }
 
   if (opts.http) {
     return { client: new GroceriesClient({ session, transport: new FetchTransport(session) }) };
@@ -61,6 +67,12 @@ async function openClient(): Promise<OpenedClient> {
       client: new GroceriesClient({ session, transport: new PageTransport(page) }),
       close: () => bs.close(),
     };
+  }
+
+  if (cdpOnly) {
+    throw new Error(
+      "CDP-only mode requires --ws <url> or SAINSBURYS_WS (for example ws://127.0.0.1:9222). Start Chromium/LightPanda with CDP enabled.",
+    );
   }
 
   // Default: koonjs impersonated-TLS transport (works under Node AND Bun).
@@ -98,8 +110,15 @@ program
   .command("login")
   .description("authenticate: with SAINSBURYS_USERNAME+SAINSBURYS_PASSWORD set, fills the form headlessly (add --mfa <code> if prompted); otherwise opens an interactive browser window")
   .option("--mfa <code>", "one-time code for the MFA challenge step")
-  .action(async (cmdOpts: { mfa?: string }) => {
+  .option("--mfa-file <path>", "wait for an MFA code to be written to this file (agent-friendly)")
+  .action(async (cmdOpts: { mfa?: string; mfaFile?: string }) => {
     const opts = program.opts();
+    const cdpOnly = opts.cdpOnly || process.env.SAINSBURYS_CDP_ONLY === "1";
+    if (cdpOnly && !wsEndpoint(opts)) {
+      throw new Error(
+        "CDP-only mode requires --ws <url> or SAINSBURYS_WS for login too. Start Chromium/LightPanda with CDP enabled.",
+      );
+    }
     const username = process.env.SAINSBURYS_USERNAME;
     const password = process.env.SAINSBURYS_PASSWORD;
     try {
@@ -111,6 +130,7 @@ program
           username,
           password,
           mfaCode: cmdOpts.mfa,
+          mfaFile: cmdOpts.mfaFile,
           ws: wsEndpoint(opts),
           headed: opts.headed,
           verbose: opts.verbose,
