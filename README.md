@@ -48,10 +48,13 @@ node src/index.ts --help              # same file, same features
 ```bash
 sainsburys login                 # visible local window; complete MFA yourself
 sainsburys login --ws ws://host:9222   # same, in a remote CDP browser
+SAINSBURYS_CDP_ONLY=1 SAINSBURYS_WS=ws://127.0.0.1:9222 sainsburys whoami # Pi-safe CDP-only mode
 
 # headless / CI — CLI fills the form itself; creds via env only (never argv):
 SAINSBURYS_USERNAME=you@example.com SAINSBURYS_PASSWORD='...' sainsburys login
 SAINSBURYS_USERNAME=... SAINSBURYS_PASSWORD=... sainsburys login --mfa 123456  # pre-supply OTP
+# Agent-friendly MFA handoff: the process prints MFA_REQUIRED, then waits for the file
+SAINSBURYS_USERNAME=... SAINSBURYS_PASSWORD=... sainsburys login --ws ws://127.0.0.1:9222 --mfa-file /tmp/sainsburys-mfa
 
 # or, no browser at all:
 sainsburys import-cookie-header "WC_AUTHENTICATION_...=...; JSESSIONID=..." -t <wcauthtoken>
@@ -59,7 +62,9 @@ sainsburys import-cookie-header "WC_AUTHENTICATION_...=...; JSESSIONID=..." -t <
 ```
 
 Headless credential mode pauses for the SMS/app OTP if `--mfa` isn't given and a
-terminal is attached. On failure it saves a screenshot to
+terminal is attached. For Hermes or another non-interactive agent, pass
+`--mfa-file <path>`: it prints `MFA_REQUIRED`, polls that file, and continues as
+soon as the user/agent writes the code. On failure it saves a screenshot to
 `~/.sainsburys/login-debug.png` for diagnosis.
 
 Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
@@ -78,7 +83,7 @@ Session persists to `~/.sainsburys/session.json` (chmod 600). Verify with
 | slots | `slots reservation` · `slots list [-p POSTCODE]` · `slots book <id\|regex> [--dry-run]` · `slots cancel` |
 | diagnostics | `doctor api` · `doctor lightpanda [--ws ws://127.0.0.1:9222]` |
 
-Global flags: `--json -v --ws <url> --headed --browser --http --session <path>`.
+Global flags: `--json -v --ws <url> --cdp-only --headed --browser --http --session <path>`.
 
 ## Amend semantics
 
@@ -100,8 +105,12 @@ Bun/Node/curl gets `403 Access Denied` at the edge — and also denies
 | local Chromium page | `--browser` (+`--headed`) | Yes, local | Same as above with auto-discovered Playwright Chromium |
 | raw fetch | `--http` | No | Usually edge-denied; kept for tolerant networks/proxies |
 
-Only `login` needs a visible browser (you type credentials + MFA). Everything else is
-plain authenticated REST over an impersonated TLS session (~0.8s per command).
+On Raspberry Pi, use `--cdp-only` with a Chromium-compatible CDP endpoint. This
+prevents the CLI from trying to load the optional native `koonjs` module.
+
+In the normal mode only `login` needs a visible browser; everything else is plain
+authenticated REST over an impersonated TLS session (~0.8s per command). In
+`--cdp-only` mode, all commands intentionally use the CDP browser's session.
 
 ### Runtimes
 

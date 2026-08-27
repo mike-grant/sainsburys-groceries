@@ -36,7 +36,8 @@ Session cookies are stored at `~/.sainsburys/session.json`. Four ways to auth:
 1. **Headless credential login** (servers/CI/agents — no window needed):
    ```bash
    SAINSBURYS_USERNAME=you@example.com SAINSBURYS_PASSWORD='...' sainsburys login
-   # if Sainsbury's sends an MFA code, add: --mfa <code>  (or it prompts on stdin)
+   # if Sainsbury's sends an MFA code, add: --mfa <code>
+   # for Hermes/non-interactive use: --mfa-file /tmp/sainsburys-mfa
    ```
    Credentials are read from env only, never argv. On failure a screenshot is
    saved to `~/.sainsburys/login-debug.png`.
@@ -66,7 +67,9 @@ Check health: `sainsburys whoami` or `sainsburys doctor api`.
 | Cancel slot | `sainsburys slots cancel` |
 | Test LightPanda/CDP | `sainsburys doctor lightpanda [--ws ws://127.0.0.1:9222]` |
 
-Global flags: `--json`, `-v`, `--ws <url>` (remote CDP endpoint), `--headed`, `--http` (direct fetch; usually Akamai-blocked), `--session <path>`.
+Global flags: `--json`, `-v`, `--ws <url>` (remote CDP endpoint), `--cdp-only`, `--headed`, `--http` (direct fetch; usually Akamai-blocked), `--session <path>`.
+
+On Raspberry Pi, set `SAINSBURYS_CDP_ONLY=1` and `SAINSBURYS_WS=ws://127.0.0.1:9222` (or pass `--cdp-only --ws ...`) to force every API command through the CDP browser and avoid the optional native `koonjs` transport. For agent-driven MFA, use `login --mfa-file <path>`; the command emits `MFA_REQUIRED` and resumes when the file contains the one-time code.
 
 ## Behavioural notes for agents
 

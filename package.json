@@ -32,10 +32,10 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "koonjs": "^0.8.1"
+    "playwright-core": "^1.49.0"
   },
   "optionalDependencies": {
-    "playwright-core": "^1.49.0"
+    "koonjs": "^0.8.1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.10",

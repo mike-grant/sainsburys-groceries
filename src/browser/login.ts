@@ -11,6 +11,10 @@ export interface LoginResult {
 }
 
 const AUTH_COOKIE_PREFIX = "WC_AUTHENTICATION_";
+const AUTH_ORIGINS = [
+  "https://www.sainsburys.co.uk",
+  "https://account.sainsburys.co.uk",
+];
 
 function sessionFromCookies(
   cookies: import("playwright-core").Cookie[],
@@ -37,7 +41,7 @@ async function waitUntilAuthed(
   deadline: number,
 ): Promise<boolean> {
   while (Date.now() < deadline) {
-    const cookies = await context.cookies(["https://www.sainsburys.co.uk"]);
+    const cookies = await context.cookies(AUTH_ORIGINS);
     if (cookies.some((c) => c.name.startsWith(AUTH_COOKIE_PREFIX))) return true;
     await new Promise((r) => setTimeout(r, 1500));
   }
@@ -75,7 +79,7 @@ export async function interactiveLogin(
     if (!authed)
       throw new Error("Timed out waiting for login (no WC_AUTHENTICATION cookie seen)");
 
-    const cookies = await bs.context.cookies(["https://www.sainsburys.co.uk"]);
+    const cookies = await bs.context.cookies(AUTH_ORIGINS);
     const sessionPath = saveSession(sessionFromCookies(cookies), opts.sessionPath);
     return { session: sessionFromCookies(cookies), sessionPath };
   } finally {
@@ -88,6 +92,8 @@ export interface CredentialLoginOptions extends ConnectOptions {
   password: string;
   /** One-time code for the post-submit MFA step, if the account requires it. */
   mfaCode?: string;
+  /** File to poll for an MFA code, useful for non-interactive agents. */
+  mfaFile?: string;
   sessionPath?: string;
   timeoutMs?: number;
 }
@@ -108,6 +114,32 @@ function promptMfa(): Promise<string> {
       resolve(code);
     });
   });
+}
+
+async function waitForMfaFile(file: string, deadline: number): Promise<string> {
+  console.error(`MFA_REQUIRED: waiting for a one-time code in ${file}`);
+  while (Date.now() < deadline) {
+    try {
+      const code = fs.readFileSync(file, "utf8").trim();
+      if (code) return code.split(/\s+/)[0]!;
+    } catch {
+      // The agent/user may create the file after the MFA prompt appears.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Timed out waiting for MFA code file ${file}`);
+}
+
+async function resolveMfaCode(
+  opts: { mfaCode?: string; mfaFile?: string },
+  deadline: number,
+): Promise<string> {
+  if (opts.mfaCode) return opts.mfaCode;
+  if (opts.mfaFile) return waitForMfaFile(opts.mfaFile, deadline);
+  if (process.stdin.isTTY) return promptMfa();
+  throw new Error(
+    "MFA is required but stdin is not interactive. Re-run with --mfa <code> or --mfa-file <path>; write the code to that file when prompted.",
+  );
 }
 
 /**
@@ -131,7 +163,8 @@ async function stripConsentOverlay(page: import("playwright-core").Page): Promis
  * Credential-driven headless login: fills the real login form inside a
  * headless/remote browser. Credentials come from env (SAINSBURYS_USERNAME /
  * SAINSBURYS_PASSWORD) — never argv. If Sainsbury's challenges with an MFA
- * step, `mfaCode` is used when provided; otherwise we prompt on stdin.
+ * step, `mfaCode` is used when provided. Agents can use `mfaFile` to pause
+ * until the user writes the received code to a file.
  */
 export async function credentialLogin(opts: CredentialLoginOptions): Promise<LoginResult> {
   const timeoutMs = opts.timeoutMs ?? 3 * 60_000;
@@ -185,7 +218,7 @@ export async function credentialLogin(opts: CredentialLoginOptions): Promise<Log
     if (mfaSeen) {
       step("MFA input detected");
       await stripConsentOverlay(page);
-      const code = opts.mfaCode ?? (await promptMfa());
+      const code = await resolveMfaCode(opts, Date.now() + timeoutMs);
       await page.locator(mfaSelector).first().fill(code);
       await stripConsentOverlay(page);
       await page
@@ -216,7 +249,7 @@ export async function credentialLogin(opts: CredentialLoginOptions): Promise<Log
     }
     step("authenticated ✓ capturing session...");
 
-    const cookies = await bs.context.cookies(["https://www.sainsburys.co.uk"]);
+    const cookies = await bs.context.cookies(AUTH_ORIGINS);
     const sessionPath = saveSession(sessionFromCookies(cookies), opts.sessionPath);
     return { session: sessionFromCookies(cookies), sessionPath };
   } finally {
