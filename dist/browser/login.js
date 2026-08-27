@@ -4,6 +4,10 @@ import { LOGIN_URL } from "../config.js";
 import { dismissCookieConsent, connectBrowser } from "./connect.js";
 import { saveSession } from "../session/store.js";
 const AUTH_COOKIE_PREFIX = "WC_AUTHENTICATION_";
+const AUTH_ORIGINS = [
+    "https://www.sainsburys.co.uk",
+    "https://account.sainsburys.co.uk",
+];
 function sessionFromCookies(cookies) {
     return {
         cookies: cookies.map((c) => ({
@@ -23,7 +27,7 @@ function sessionFromCookies(cookies) {
 }
 async function waitUntilAuthed(context, deadline) {
     while (Date.now() < deadline) {
-        const cookies = await context.cookies(["https://www.sainsburys.co.uk"]);
+        const cookies = await context.cookies(AUTH_ORIGINS);
         if (cookies.some((c) => c.name.startsWith(AUTH_COOKIE_PREFIX)))
             return true;
         await new Promise((r) => setTimeout(r, 1500));
@@ -51,7 +55,7 @@ export async function interactiveLogin(opts) {
         const authed = await waitUntilAuthed(bs.context, Date.now() + timeoutMs);
         if (!authed)
             throw new Error("Timed out waiting for login (no WC_AUTHENTICATION cookie seen)");
-        const cookies = await bs.context.cookies(["https://www.sainsburys.co.uk"]);
+        const cookies = await bs.context.cookies(AUTH_ORIGINS);
         const sessionPath = saveSession(sessionFromCookies(cookies), opts.sessionPath);
         return { session: sessionFromCookies(cookies), sessionPath };
     }
@@ -77,6 +81,30 @@ function promptMfa() {
         });
     });
 }
+async function waitForMfaFile(file, deadline) {
+    console.error(`MFA_REQUIRED: waiting for a one-time code in ${file}`);
+    while (Date.now() < deadline) {
+        try {
+            const code = fs.readFileSync(file, "utf8").trim();
+            if (code)
+                return code.split(/\s+/)[0];
+        }
+        catch {
+            // The agent/user may create the file after the MFA prompt appears.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    throw new Error(`Timed out waiting for MFA code file ${file}`);
+}
+async function resolveMfaCode(opts, deadline) {
+    if (opts.mfaCode)
+        return opts.mfaCode;
+    if (opts.mfaFile)
+        return waitForMfaFile(opts.mfaFile, deadline);
+    if (process.stdin.isTTY)
+        return promptMfa();
+    throw new Error("MFA is required but stdin is not interactive. Re-run with --mfa <code> or --mfa-file <path>; write the code to that file when prompted.");
+}
 /**
  * The OneTrust consent SDK re-renders a full-page dark filter between login
  * steps, intercepting all pointer events. Remove it outright rather than
@@ -97,7 +125,8 @@ async function stripConsentOverlay(page) {
  * Credential-driven headless login: fills the real login form inside a
  * headless/remote browser. Credentials come from env (SAINSBURYS_USERNAME /
  * SAINSBURYS_PASSWORD) — never argv. If Sainsbury's challenges with an MFA
- * step, `mfaCode` is used when provided; otherwise we prompt on stdin.
+ * step, `mfaCode` is used when provided. Agents can use `mfaFile` to pause
+ * until the user writes the received code to a file.
  */
 export async function credentialLogin(opts) {
     const timeoutMs = opts.timeoutMs ?? 3 * 60_000;
@@ -142,7 +171,7 @@ export async function credentialLogin(opts) {
         if (mfaSeen) {
             step("MFA input detected");
             await stripConsentOverlay(page);
-            const code = opts.mfaCode ?? (await promptMfa());
+            const code = await resolveMfaCode(opts, Date.now() + timeoutMs);
             await page.locator(mfaSelector).first().fill(code);
             await stripConsentOverlay(page);
             await page
@@ -169,7 +198,7 @@ export async function credentialLogin(opts) {
             throw new Error("Credential login failed — check credentials, or an unexpected MFA/challenge screen appeared.");
         }
         step("authenticated ✓ capturing session...");
-        const cookies = await bs.context.cookies(["https://www.sainsburys.co.uk"]);
+        const cookies = await bs.context.cookies(AUTH_ORIGINS);
         const sessionPath = saveSession(sessionFromCookies(cookies), opts.sessionPath);
         return { session: sessionFromCookies(cookies), sessionPath };
     }
